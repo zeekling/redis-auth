@@ -107,3 +107,5 @@ dkms.conf
 *.out
 *.app
 
+*.xo
+*.so
