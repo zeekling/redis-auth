@@ -1,12 +1,13 @@
 
 uname_S := $(shell sh -c 'uname -s 2>/dev/null || echo not')
 
+WARN=-Wall -W -Wno-missing-field-initializers
 # Compile flags for linux / osx
 ifeq ($(uname_S),Linux)
-	SHOBJ_CFLAGS ?= -W -Wall -fno-common -g -ggdb -std=c99 -O2
+	SHOBJ_CFLAGS ?= -W -Wall -fno-common -g -ggdb -std=c11 -O2 $(WARN) $(OPTIMIZATION)
 	SHOBJ_LDFLAGS ?= -shared
 else
-	SHOBJ_CFLAGS ?= -W -Wall -dynamic -fno-common -g -ggdb -std=c99 -O2
+	SHOBJ_CFLAGS ?= -W -Wall -dynamic -fno-common -g -ggdb -std=c11 -O2 $(WARN) $(OPTIMIZATION)
 	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
 endif
 
@@ -25,4 +26,4 @@ redis-acl.so: redis-acl.xo
 	$(LD) -o $@ $^ $(SHOBJ_LDFLAGS) $(LIBS) -lc
 
 clean:
-	rm -rf *.xo *.so
+	rm -rf *.xo *.so *.o
