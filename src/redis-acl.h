@@ -5,7 +5,8 @@
 /* Error status return values. */
 #define REDISMODULE_OK 0
 #define REDISMODULE_ERR 1
-#define LOG_LEVL_NOTICE "notice"
+#define LOG_LEVEL_NOTICE "notice"
+#define LOG_LEVEL_WARNING "warning"
 
 /* *
  * Redis Auth command
