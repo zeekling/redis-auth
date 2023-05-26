@@ -10,12 +10,27 @@
 
 #define UNUSED(V) ((void) V) 
 
-/* *
- * Redis Auth command
- * */
-int AuthCommand_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
+struct redisAcl {
+    char *username;
+    char *password;
+} redisAcl;
 
-void AuthFilter_CommandFilter(RedisModuleCommandFilter *filter);
+
+RedisModuleUser *createUser(RedisModuleCtx *ctx, const char *name);
+
+int authReply(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err);
+
+void freeAuthData(RedisModuleCtx *ctx, void *privdata);
+
+void *AuthBlockThreadMain(void *arg);
+
+int moduleBlockAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err);
+
+int moduleAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err);
+
+void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,  void *data);
+
+int initUsers(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 #endif // REDISAUTH_H
 

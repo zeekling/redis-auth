@@ -1,43 +1,16 @@
 #include <pthread.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "redis-acl.h"
 #include "redismodule.h"
 
-static RedisModuleCommandFilter *filter;
 static int times = 1;
 static int MAX_TIME = 1000;
+static RedisModuleDict *userDict = NULL;
 
-void AuthFilter_CommandFilter(RedisModuleCommandFilter *filter) {
-  int pos = 0;
-  RedisModule_Log(NULL, LOG_LEVEL_NOTICE, "command filter");
-  while (pos < RedisModule_CommandFilterArgsCount(filter)) {
-    const RedisModuleString *arg = RedisModule_CommandFilterArgGet(filter, pos);
-    size_t arg_len;
-    const char *arg_str = RedisModule_StringPtrLen(arg, &arg_len);
-    // RedisModule_Log(NULL, LOG_LEVEL_NOTICE, "str=%s,len=%ld", arg_str, arg_len);
-    // if (strcmp(arg_str, "auth") == 0) {
-    //  RedisModule_Log(NULL, LOG_LEVEL_NOTICE, "command is auth");
-    //  RedisModule_CommandFilterArgReplace(filter, pos,
-    //  RedisModule_CreateString(NULL, "acl.auth", 9));
-    //}
-    // 解密
-    pos++;
-  }
-  RedisModule_Log(NULL, LOG_LEVEL_NOTICE, "filter finished");
-}
-
-int AuthCommand_RedisCommand(RedisModuleCtx *ctx, RedisModuleString **argv,
-                             int argc) {
+RedisModuleUser *createUser(RedisModuleCtx *ctx, const char *name) {
   REDISMODULE_NOT_USED(ctx);
-  REDISMODULE_NOT_USED(argc);
-  REDISMODULE_NOT_USED(argv);
-  RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "acl.auth begin");
-  RedisModule_ReplyWithCString(ctx, "ok");
-  return REDISMODULE_OK;
-}
-
-RedisModuleUser* createUser(RedisModuleCtx *ctx, const char *name) {
   RedisModuleUser *user = RedisModule_CreateModuleUser(name);
   RedisModule_SetModuleUserACL(user, "allcommands");
   RedisModule_SetModuleUserACL(user, "allkeys");
@@ -45,8 +18,8 @@ RedisModuleUser* createUser(RedisModuleCtx *ctx, const char *name) {
   return user;
 }
 
-int module_auth_reply(RedisModuleCtx *ctx, RedisModuleString *username,
-                      RedisModuleString *password, RedisModuleString **err) {
+int authReply(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err) {
+  REDISMODULE_NOT_USED(password);
   void **targ = RedisModule_GetBlockedClientPrivateData(ctx);
   int result = (uintptr_t)targ[0];
   RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "auth reply");
@@ -56,9 +29,10 @@ int module_auth_reply(RedisModuleCtx *ctx, RedisModuleString *username,
     // auth success
     RedisModuleUser *moduleUser = createUser(ctx, user);
     uint64_t client_id;
-    int auth_result = RedisModule_AuthenticateClientWithUser(ctx, moduleUser, NULL, NULL, &client_id);
+    int authResult = RedisModule_AuthenticateClientWithUser(
+        ctx, moduleUser, NULL, NULL, &client_id);
     RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "auth success user=%s, %lu", user, client_id);
-    if (auth_result == REDISMODULE_ERR) {
+    if (authResult == REDISMODULE_ERR) {
       RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user not exits user=%s", user);
     }
     return REDISMODULE_AUTH_HANDLED;
@@ -72,46 +46,46 @@ int module_auth_reply(RedisModuleCtx *ctx, RedisModuleString *username,
   return REDISMODULE_AUTH_HANDLED;
 }
 
-void free_auth_data(RedisModuleCtx *ctx, void *privdata) {
+void freeAuthData(RedisModuleCtx *ctx, void *privdata) {
   REDISMODULE_NOT_USED(ctx);
   RedisModule_Free(privdata);
 }
 
-void *AuthBlock_ThreadMain(void *arg) {
+void *AuthBlockThreadMain(void *arg) {
   void **targ = arg;
   RedisModuleBlockedClient *bc = targ[0];
   RedisModuleCtx *ctx = targ[1];
   RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "begin auth ");
-  const char *user = RedisModule_StringPtrLen(targ[2], NULL);
   const char *pwd = RedisModule_StringPtrLen(targ[3], NULL);
+  void **replyarg = RedisModule_Alloc(sizeof(void *));
   int result = 2;
-  if (!strcmp(user, "foo") && !strcmp(pwd, "block_allow")) {
-    RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "auth success");
-    result = 1;
-  } else if (!strcmp(user, "foo") && !strcmp(pwd, "block_deny")) {
+  int nokey;
+  struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGet(userDict, targ[2], &nokey);
+  if (nokey || !acl) {
+    RedisModule_Log(ctx, LOG_LEVEL_WARNING, "auth failed");
     result = 0;
-  } else if (!strcmp(user, "foo") && !strcmp(pwd, "block_abort")) {
-    RedisModule_BlockedClientMeasureTimeEnd(bc);
-    RedisModule_AbortBlock(bc);
-    goto cleanup;
+    goto returnResult;
+  }
+  if (!strcmp(pwd, acl->password)) {
+    result = 1;
   } else {
     result = 0;
   }
-  void **replyarg = RedisModule_Alloc(sizeof(void *));
+returnResult:  
   replyarg[0] = (void *)(uintptr_t)result;
   RedisModule_BlockedClientMeasureTimeEnd(bc);
   RedisModule_UnblockClient(bc, replyarg);
-cleanup:
   RedisModule_FreeString(NULL, targ[2]);
   RedisModule_FreeString(NULL, targ[3]);
   RedisModule_Free(targ);
   return NULL;
 }
 
-int module_auth(RedisModuleCtx *ctx, RedisModuleString *username,
-                RedisModuleString *password, RedisModuleString **err) {
+int moduleBlockAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err) {
+  REDISMODULE_NOT_USED(password);
+  REDISMODULE_NOT_USED(err);
   RedisModuleBlockedClient *bc =
-      RedisModule_BlockClientOnAuth(ctx, module_auth_reply, free_auth_data);
+      RedisModule_BlockClientOnAuth(ctx, authReply, freeAuthData);
   int ctx_flags = RedisModule_GetContextFlags(ctx);
   if (ctx_flags & REDISMODULE_CTX_FLAGS_MULTI ||
       ctx_flags & REDISMODULE_CTX_FLAGS_LUA) {
@@ -125,23 +99,32 @@ int module_auth(RedisModuleCtx *ctx, RedisModuleString *username,
   targ[1] = ctx;
   targ[2] = RedisModule_CreateStringFromString(NULL, username);
   targ[3] = RedisModule_CreateStringFromString(NULL, password);
-  /* Create bg thread and pass the blockedclient, username and password to it.
-   */
-  if (pthread_create(&tid, NULL, AuthBlock_ThreadMain, targ) != 0) {
+  if (pthread_create(&tid, NULL, AuthBlockThreadMain, targ) != 0) {
     RedisModule_AbortBlock(bc);
   }
   return REDISMODULE_AUTH_HANDLED;
 }
 
-int auth_cb(RedisModuleCtx *ctx, RedisModuleString *username,
-            RedisModuleString *password, RedisModuleString **err) {
+int moduleAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err) {
   const char *user = RedisModule_StringPtrLen(username, NULL);
   const char *pwd = RedisModule_StringPtrLen(password, NULL);
-  if (!strcmp(user, "foo") && !strcmp(pwd, "allow")) {
-    RedisModuleUser *user = createUser(ctx, "foo");
-    RedisModule_AuthenticateClientWithACLUser(ctx, "foo", 3, NULL, NULL, NULL);
+  int nokey;
+  struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGet(userDict, username, &nokey);
+  if (!nokey) {
+    RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user=%s, password=", acl->username, acl->password);
+  }
+  
+  if (!nokey && acl->password && !strcmp(pwd, acl->password)) {
+    RedisModuleUser *moduleUser = createUser(ctx, user);
+    uint64_t client_id;
+    int authResult = RedisModule_AuthenticateClientWithUser(
+        ctx, moduleUser, NULL, NULL, &client_id);
+    RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "auth success user=%s, %lu", user, client_id);
+    if (authResult == REDISMODULE_ERR) {
+      RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user not exits user=%s", user);
+    }
     return REDISMODULE_AUTH_HANDLED;
-  } else if (!strcmp(user, "foo") && !strcmp(pwd, "deny")) {
+  } else {
     const char *err_msg = "Auth denied by Misc Module.";
     *err = RedisModule_CreateString(ctx, err_msg, strlen(err_msg));
     return REDISMODULE_AUTH_HANDLED;
@@ -149,8 +132,7 @@ int auth_cb(RedisModuleCtx *ctx, RedisModuleString *username,
   return REDISMODULE_AUTH_NOT_HANDLED;
 }
 
-void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,
-                      void *data) {
+void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,  void *data) {
   REDISMODULE_NOT_USED(e);
   RedisModuleCronLoop *ei = data;
   REDISMODULE_NOT_USED(ei);
@@ -163,35 +145,36 @@ void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,
   times = 0;
 }
 
-int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv,
-                       int argc) {
+int initUsers(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  REDISMODULE_NOT_USED(ctx);
   REDISMODULE_NOT_USED(argv);
   REDISMODULE_NOT_USED(argc);
-  if (RedisModule_Init(ctx, "redis-auth", 1, REDISMODULE_APIVER_1) ==
-      REDISMODULE_ERR) {
+  if (userDict == NULL) {
+    userDict = RedisModule_CreateDict(ctx);
+  }
+  struct redisAcl *acl = RedisModule_Calloc(1, sizeof(struct redisAcl));
+  acl->username = "foo";
+  acl->password = "block_allow";
+  RedisModuleString *key = RedisModule_CreateString(ctx, acl->username, strlen(acl->username));
+  int result = RedisModule_DictSet(userDict, key, &acl);
+  if (result == REDISMODULE_OK) {
+    RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user add success, username=%s", acl->username);
+  }
+  return REDISMODULE_OK;
+}
+
+int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv, int argc) {
+  REDISMODULE_NOT_USED(argv);
+  REDISMODULE_NOT_USED(argc);
+  if (RedisModule_Init(ctx, "redis-auth", 1, REDISMODULE_APIVER_1) == REDISMODULE_ERR) {
     RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "init redis-auth failed");
     return REDISMODULE_ERR;
   }
 
-  filter = RedisModule_RegisterCommandFilter(ctx, AuthFilter_CommandFilter, 0);
-  if (filter == NULL) {
-    RedisModule_Log(ctx, LOG_LEVEL_WARNING, "init filter failed");
-    return REDISMODULE_ERR;
-  }
-  RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "init filter success");
+  RedisModule_RegisterAuthCallback(ctx, moduleBlockAuth);
+  RedisModule_RegisterAuthCallback(ctx, moduleAuth);
 
-  if (RedisModule_CreateCommand(ctx, "acl.auth", AuthCommand_RedisCommand,
-                                "no-auth", 0, 0, 0) == REDISMODULE_ERR) {
-    RedisModule_Log(ctx, LOG_LEVEL_WARNING, "init acl.auth failed");
-    return REDISMODULE_ERR;
-  }
-
-  RedisModule_RegisterAuthCallback(ctx, module_auth);
-  RedisModule_RegisterAuthCallback(ctx, auth_cb);
-
-  RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "init command success");
-  // RedisModule_SubscribeToServerEvent(ctx, RedisModuleEvent_CronLoop,
-  // cronLoopCallBack);
+  initUsers(ctx, argv, argc);
 
   RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "init redis-auth success!");
   return REDISMODULE_OK;
