@@ -8,6 +8,8 @@
 #define LOG_LEVEL_NOTICE "notice"
 #define LOG_LEVEL_WARNING "warning"
 
+#define UNUSED(V) ((void) V) 
+
 /* *
  * Redis Auth command
  * */
