@@ -11,8 +11,8 @@
 #define UNUSED(V) ((void) V) 
 
 struct redisAcl {
-    char *username;
-    char *password;
+    RedisModuleString *username;
+    RedisModuleString *password;
 } redisAcl;
 
 
@@ -29,8 +29,6 @@ int moduleBlockAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModul
 int moduleAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleString *password, RedisModuleString **err);
 
 void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,  void *data);
-
-int initUsers(RedisModuleCtx *ctx, RedisModuleString **argv, int argc);
 
 #endif // REDISAUTH_H
 
