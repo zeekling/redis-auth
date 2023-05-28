@@ -62,7 +62,7 @@ void *AuthBlockThreadMain(void *arg) {
     const char *pwd = RedisModule_StringPtrLen(targ[3], NULL);
     void **replyarg = RedisModule_Alloc(sizeof(void *));
     int result = 2;
-    struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGetC(userDict, user, strlen(user), NULL);
+    struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGetC(userDict, (void *)user, strlen(user), NULL);
     if (!acl) {
         RedisModule_Log(ctx, LOG_LEVEL_WARNING, "auth failed");
         result = 0;
@@ -112,7 +112,7 @@ int moduleAuth(RedisModuleCtx *ctx, RedisModuleString *username,
                RedisModuleString *password, RedisModuleString **err) {
     const char *user = RedisModule_StringPtrLen(username, NULL);
     const char *pwd = RedisModule_StringPtrLen(password, NULL);
-    struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGetC(userDict, user, strlen(user), NULL);
+    struct redisAcl *acl = (struct redisAcl *)RedisModule_DictGetC(userDict, (void *)user, strlen(user), NULL);
     if (!acl) {
         const char *err_msg = "Auth denied by Misc Module.";
         *err = RedisModule_CreateString(ctx, err_msg, strlen(err_msg));
@@ -158,13 +158,24 @@ int initUsers(RedisModuleCtx *ctx, const char *user, const char *passwd) {
     memset(acl, 0, sizeof(*acl));
     acl->username = RedisModule_CreateString(ctx, user, strlen(user));
     acl->password = RedisModule_CreateString(ctx, passwd, strlen(passwd));
-    int result = RedisModule_DictSetC(userDict, user, strlen(user), acl);
+    int result = RedisModule_DictSetC(userDict, (void *)user, strlen(user), acl);
     if (result == REDISMODULE_OK) {
-        char *userModule = RedisModule_StringPtrLen(acl->username, NULL);
-        char *passwdModule = RedisModule_StringPtrLen(acl->password, NULL);
-        RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user add success, username=%s, password=%s", userModule, passwdModule);
+        const char *userModule = RedisModule_StringPtrLen(acl->username, NULL);
+        RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "user add success, username=%s", userModule);
     }
     return REDISMODULE_OK;
+}
+
+int banDefaultUser(RedisModuleCtx *ctx) {
+  RedisModuleCallReply *reply = RedisModule_Call(ctx, "ACL", "ccc", "SETUSER", "default", "off");
+  if (reply == NULL) {
+    RedisModule_Log(ctx, LOG_LEVEL_WARNING, "Ban default user failed.");
+    return REDISMODULE_ERR;
+  }
+  size_t len;
+  const char *replyStr = RedisModule_CallReplyProto(reply, &len);
+  RedisModule_Log(ctx, "Ban default user success, reply=%s", replyStr);
+  return REDISMODULE_OK;
 }
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv,
@@ -178,7 +189,7 @@ int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv,
 
     RedisModule_RegisterAuthCallback(ctx, moduleBlockAuth);
     RedisModule_RegisterAuthCallback(ctx, moduleAuth);
-
+    banDefaultUser(ctx);
     initUsers(ctx, "foo", "block_allow");
 
     RedisModule_Log(ctx, LOG_LEVEL_NOTICE, "init redis-auth success!");

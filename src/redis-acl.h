@@ -30,6 +30,8 @@ int moduleAuth(RedisModuleCtx *ctx, RedisModuleString *username, RedisModuleStri
 
 void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,  void *data);
 
+int banDefaultUser(RedisModuleCtx *ctx);
+
 #endif // REDISAUTH_H
 
 
