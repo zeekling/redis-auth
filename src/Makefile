@@ -5,10 +5,10 @@ WARN=-Wall -W -Wno-missing-field-initializers
 # Compile flags for linux / osx
 ifeq ($(uname_S),Linux)
 	SHOBJ_CFLAGS ?= -W -Wall -fno-common -g -ggdb -std=c11 -O2 $(WARN) $(OPTIMIZATION)
-	SHOBJ_LDFLAGS ?= -shared
+	SHOBJ_LDFLAGS ?= -shared -lpq
 else
 	SHOBJ_CFLAGS ?= -W -Wall -dynamic -fno-common -g -ggdb -std=c11 -O2 $(WARN) $(OPTIMIZATION)
-	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup
+	SHOBJ_LDFLAGS ?= -bundle -undefined dynamic_lookup -lpq
 endif
 
 .SUFFIXES: .c .so .xo .o
