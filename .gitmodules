@@ -1,4 +1,0 @@
-[submodule "deps/libpqxx"]
-	path = deps/libpqxx
-	url = https://github.com/jtv/libpqxx.git
-	branch = 7.4
