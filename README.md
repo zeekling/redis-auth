@@ -5,6 +5,12 @@ The Redis third-party authentication module has the following issues due to the 
 - When in cluster mode, the permission information in each instance is separate and it is not easy to maintain consistency.
 
 
+# Dependency 
+
+Before running the module, the following dependencies need to be installed:
+- postgresql-client
+
+
 # Roadmap
 
 - [ ] Support synchronizing user permission information from the postgreSQL database.
