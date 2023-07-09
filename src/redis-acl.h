@@ -8,6 +8,9 @@
 #define LOG_LEVEL_NOTICE "notice"
 #define LOG_LEVEL_WARNING "warning"
 
+const char *enum_vals[] = {"none", "five", "one", "two", "four"};
+const int int_vals[] = {0, 5, 1, 2, 4};
+
 #define UNUSED(V) ((void) V) 
 
 struct redisAcl {
@@ -32,7 +35,10 @@ void cronLoopCallBack(RedisModuleCtx *ctx, RedisModuleEvent *e, uint64_t sub,  v
 
 int banDefaultUser(RedisModuleCtx *ctx);
 
+int registerConfig(RedisModuleCtx *ctx);
+
+RedisModuleString *getStringConfigCommand(const char *name, void *privdata);
+
+int setStringConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err);
+
 #endif // REDISAUTH_H
-
-
-
