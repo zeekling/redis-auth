@@ -4,10 +4,13 @@
 
 #include "redis-acl.h"
 #include "redismodule.h"
+#include "postgres-client.h"
 
 static int times = 1;
 static int MAX_TIME = 1000;
 static RedisModuleDict *userDict = NULL;
+
+RedisModuleString *strval = NULL;
 
 RedisModuleUser *createUser(RedisModuleCtx *ctx, const char *name) {
     REDISMODULE_NOT_USED(ctx);
@@ -176,6 +179,52 @@ int banDefaultUser(RedisModuleCtx *ctx) {
   const char *replyStr = RedisModule_CallReplyProto(reply, &len);
   RedisModule_Log(ctx, "Ban default user success, reply=%s", replyStr);
   return REDISMODULE_OK;
+}
+
+RedisModuleString *getAuthUrlConfigCommand(const char *name, void *privdata) {
+    REDISMODULE_NOT_USED(name);
+    REDISMODULE_NOT_USED(privdata);
+    return strval;
+}
+int setAuthUrlConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err) {
+    REDISMODULE_NOT_USED(name);
+    REDISMODULE_NOT_USED(err);
+    REDISMODULE_NOT_USED(privdata);
+    size_t len;
+    if (!strcasecmp(RedisModule_StringPtrLen(new, &len), "rejectisfreed")) {
+        *err = RedisModule_CreateString(NULL, "Cannot set string to 'rejectisfreed'", 36);
+        return REDISMODULE_ERR;
+    }
+    if (strval) RedisModule_FreeString(NULL, strval);
+    RedisModule_RetainString(NULL, new);
+    strval = new;
+    return REDISMODULE_OK;
+}
+
+RedisModuleString *getAuthDBConfigCommand(const char *name, void *privdata) {
+    REDISMODULE_NOT_USED(name);
+    REDISMODULE_NOT_USED(privdata);
+    return strval;
+}
+int setAuthDBConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err) {
+    REDISMODULE_NOT_USED(name);
+    REDISMODULE_NOT_USED(err);
+    REDISMODULE_NOT_USED(privdata);
+    size_t len;
+    if (!strcasecmp(RedisModule_StringPtrLen(new, &len), "rejectisfreed")) {
+        *err = RedisModule_CreateString(NULL, "Cannot set string to 'rejectisfreed'", 36);
+        return REDISMODULE_ERR;
+    }
+    if (strval) RedisModule_FreeString(NULL, strval);
+    RedisModule_RetainString(NULL, new);
+    strval = new;
+    return REDISMODULE_OK;
+}
+
+int registerConfig(RedisModuleCtx *ctx) {
+    int result = RedisModule_RegisterStringConfig(ctx, "auth.url", "", REDISMODULE_CONFIG_DEFAULT, getAuthUrlConfigCommand, setAuthUrlConfigCommand, NULL, NULL);
+    
+    RedisModule_RegisterStringConfig(ctx, "auth.db", "", REDISMODULE_CONFIG_DEFAULT, getAuthDBConfigCommand, setAuthDBConfigCommand, NULL, NULL);
 }
 
 int RedisModule_OnLoad(RedisModuleCtx *ctx, RedisModuleString **argv,
