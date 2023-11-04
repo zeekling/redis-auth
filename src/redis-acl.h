@@ -37,8 +37,12 @@ int banDefaultUser(RedisModuleCtx *ctx);
 
 int registerConfig(RedisModuleCtx *ctx);
 
-RedisModuleString *getStringConfigCommand(const char *name, void *privdata);
+RedisModuleString *getAuthUrlConfigCommand(const char *name, void *privdata);
 
-int setStringConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err);
+int setAuthUrlConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err);
+
+RedisModuleString *getAuthDBConfigCommand(const char *name, void *privdata);
+
+int setAuthDBConfigCommand(const char *name, RedisModuleString *new, void *privdata, RedisModuleString **err);
 
 #endif // REDISAUTH_H
